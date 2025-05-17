@@ -93,19 +93,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
                 false
             }
 
             // Preview APIs. Ignore `--isolated` and warn.
             Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 false
             }
 
             // Non-preview APIs. Continue to support `--isolated`, but warn.
             _ => {
-                warn_user!("The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 true
             }
         }
@@ -125,7 +131,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
         {
-            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.");
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
         }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
@@ -977,11 +985,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             if args.no_system {
-                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             if args.system {
-                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -1818,15 +1830,8 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AddSettings::resolve(args, filesystem);
+            let mut args = settings::AddSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
-            );
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
             // initialize it later on.
@@ -1852,6 +1857,55 @@ async fn run_project(
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Result<Vec<_>>>()?;
+
+            // Special-case: any local source trees specified on the command-line are automatically
+            // reinstalled.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
             let constraints = args
                 .constraints
                 .into_iter()
@@ -1869,7 +1923,7 @@ async fn run_project(
                 args.marker,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                args.raw,
                 args.indexes,
                 args.rev,
                 args.tag,

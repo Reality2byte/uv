@@ -72,7 +72,7 @@ pub(crate) async fn add(
     marker: Option<MarkerTree>,
     editable: Option<bool>,
     dependency_type: DependencyType,
-    raw_sources: bool,
+    raw: bool,
     indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
@@ -104,7 +104,13 @@ pub(crate) async fn add(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
             }
-            _ => {}
+            RequirementsSource::PylockToml(_) => {
+                bail!("Adding requirements from a `pylock.toml` is not supported in `uv add`");
+            }
+            RequirementsSource::Package(_)
+            | RequirementsSource::Editable(_)
+            | RequirementsSource::RequirementsTxt(_)
+            | RequirementsSource::EnvironmentYml(_) => {}
         }
     }
 
@@ -206,10 +212,16 @@ pub(crate) async fn add(
         if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Optional(_) => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Group(_) => {}
                 DependencyType::Dev => (),
@@ -444,7 +456,7 @@ pub(crate) async fn add(
         &target,
         editable,
         &dependency_type,
-        raw_sources,
+        raw,
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
@@ -454,7 +466,7 @@ pub(crate) async fn add(
     )?;
 
     // Add any indexes that were provided on the command-line, in priority order.
-    if !raw_sources {
+    if !raw {
         let urls = IndexUrls::from_indexes(indexes);
         for index in urls.defined_indexes() {
             toml.add_index(index)?;
@@ -519,7 +531,7 @@ pub(crate) async fn add(
         sync_state,
         locked,
         &dependency_type,
-        raw_sources,
+        raw,
         constraints,
         &settings,
         &network_settings,
@@ -551,7 +563,7 @@ fn edits(
     target: &AddTarget,
     editable: Option<bool>,
     dependency_type: &DependencyType,
-    raw_sources: bool,
+    raw: bool,
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
@@ -569,10 +581,10 @@ fn edits(
         requirement.extras = ex.into_boxed_slice();
 
         let (requirement, source) = match target {
-            AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw_sources => {
+            AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw => {
                 (uv_pep508::Requirement::from(requirement), None)
             }
-            AddTarget::Script(ref script, _) => {
+            AddTarget::Script(script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
 
@@ -589,7 +601,7 @@ fn edits(
                     existing_sources,
                 )?
             }
-            AddTarget::Project(ref project, _) => {
+            AddTarget::Project(project, _) => {
                 let existing_sources = project
                     .pyproject_toml()
                     .tool
@@ -695,10 +707,10 @@ fn edits(
         let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 toml.add_optional_dependency(extra, &requirement, source.as_ref())?
             }
-            DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
@@ -743,7 +755,7 @@ async fn lock_and_sync(
     sync_state: PlatformState,
     locked: bool,
     dependency_type: &DependencyType,
-    raw_sources: bool,
+    raw: bool,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
@@ -774,7 +786,7 @@ async fn lock_and_sync(
     .into_lock();
 
     // Avoid modifying the user request further if `--raw-sources` is set.
-    if !raw_sources {
+    if !raw {
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
@@ -902,12 +914,12 @@ async fn lock_and_sync(
             let dev = DependencyGroups::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
-        DependencyType::Optional(ref extra_name) => {
+        DependencyType::Optional(extra_name) => {
             let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
-        DependencyType::Group(ref group_name) => {
+        DependencyType::Group(group_name) => {
             let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_group(group_name.clone());
             (extras, dev)

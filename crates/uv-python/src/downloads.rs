@@ -66,6 +66,8 @@ pub enum Error {
     },
     #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
+    #[error("Invalid download URL: {0}")]
+    InvalidUrlFormat(Url),
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(String),
     #[error("Failed to create download directory")]
@@ -92,7 +94,9 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
-    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    #[error(
+        "Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)"
+    )]
     RemoteJSONNotSupported(),
     #[error("The json of the python downloads is invalid: {0}")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
@@ -266,10 +270,10 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(
-        &self,
-        python_downloads_json_url: Option<&str>,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
+    pub fn iter_downloads<'a>(
+        &'a self,
+        python_downloads_json_url: Option<&'a str>,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'a>, Error> {
         Ok(ManagedPythonDownload::iter_all(python_downloads_json_url)?
             .filter(move |download| self.satisfied_by_download(download)))
     }
@@ -340,30 +344,51 @@ impl PythonDownloadRequest {
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
+        let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version() {
             if !version.matches_interpreter(interpreter) {
+                let interpreter_version = interpreter.python_version();
+                debug!(
+                    "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
+                );
                 return false;
             }
         }
         if let Some(os) = self.os() {
-            if &Os::from(interpreter.platform().os()) != os {
+            let interpreter_os = Os::from(interpreter.platform().os());
+            if &interpreter_os != os {
+                debug!(
+                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
+                );
                 return false;
             }
         }
         if let Some(arch) = self.arch() {
-            if &Arch::from(&interpreter.platform().arch()) != arch {
+            let interpreter_arch = Arch::from(&interpreter.platform().arch());
+            if &interpreter_arch != arch {
+                debug!(
+                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
+                );
                 return false;
             }
         }
         if let Some(implementation) = self.implementation() {
-            if LenientImplementationName::from(interpreter.implementation_name())
+            let interpreter_implementation = interpreter.implementation_name();
+            if LenientImplementationName::from(interpreter_implementation)
                 != LenientImplementationName::from(*implementation)
             {
+                debug!(
+                    "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
+                );
                 return false;
             }
         }
         if let Some(libc) = self.libc() {
-            if &Libc::from(interpreter.platform().os()) != libc {
+            let interpreter_libc = Libc::from(interpreter.platform().os());
+            if &interpreter_libc != libc {
+                debug!(
+                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                );
                 return false;
             }
         }
@@ -378,7 +403,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(VersionRequest::from(&key.version())),
             match &key.implementation {
                 LenientImplementationName::Known(implementation) => Some(*implementation),
-                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+                LenientImplementationName::Unknown(name) => unreachable!(
+                    "Managed Python installations are expected to always have known implementation names, found {name}"
+                ),
             },
             Some(key.arch),
             Some(key.os),
@@ -643,9 +670,9 @@ impl ManagedPythonDownload {
         // decodes to.
         let filename = url
             .path_segments()
-            .unwrap()
+            .ok_or_else(|| Error::InvalidUrlFormat(url.clone()))?
             .next_back()
-            .unwrap()
+            .ok_or_else(|| Error::InvalidUrlFormat(url.clone()))?
             .replace("%2B", "-");
         debug_assert!(
             filename

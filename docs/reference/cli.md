@@ -1068,9 +1068,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 
-</dd><dt id="uv-add--raw-sources"><a href="#uv-add--raw-sources"><code>--raw-sources</code></a></dt><dd><p>Add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
+</dd><dt id="uv-add--raw"><a href="#uv-add--raw"><code>--raw</code></a>, <code>--raw-sources</code></dt><dd><p>Add a dependency as provided.</p>
 
-<p>By default, uv will use the <code>tool.uv.sources</code> section to record source information for Git, local, editable, and direct URL requirements.</p>
+<p>By default, uv will use the <code>tool.uv.sources</code> section to record source information for Git, local, editable, and direct URL requirements. When <code>--raw</code> is provided, uv will add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
+
+<p>Additionally, by default, uv will add bounds to your dependency, e.g., <code>foo&gt;=1.0.0</code>. When <code>--raw</code> is provided, uv will add the dependency without bounds.</p>
 
 </dd><dt id="uv-add--refresh"><a href="#uv-add--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -2462,11 +2464,11 @@ uv export [OPTIONS]
 
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
-</dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+</dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
 
 </dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
 
-<p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-install-package</code> option allows exclusion of specific packages.</p>
+<p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-emit-package</code> option allows exclusion of specific packages.</p>
 
 </dd><dt id="uv-export--no-emit-project"><a href="#uv-export--no-emit-project"><code>--no-emit-project</code></a>, <code>--no-install-project</code></dt><dd><p>Do not emit the current project.</p>
 

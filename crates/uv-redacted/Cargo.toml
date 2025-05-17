@@ -1,6 +1,6 @@
 [package]
-name = "uv-version"
-version = "0.7.5"
+name = "uv-redacted"
+version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -16,3 +16,4 @@ doctest = false
 workspace = true
 
 [dependencies]
+url = { workspace = true }
