@@ -18,7 +18,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info, instrument, trace, warn, Level};
+use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
@@ -30,7 +30,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
+use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
@@ -60,7 +60,7 @@ use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
-    fork_version_by_marker, fork_version_by_python_requirement, ForkingPossibility,
+    ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
@@ -74,7 +74,7 @@ use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
-use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap};
+use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
 
@@ -519,7 +519,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .term_intersection_for_package(next_id)
                                 .expect("a package was chosen but we don't have a term");
 
-                            if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
+                            if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                                 // Check if the decision was due to the package being unavailable
                                 if let Some(entry) = self.unavailable_packages.get(name) {
                                     state.pubgrub.add_incompatibility(
@@ -1857,7 +1857,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             url: None,
                         })
                         .collect(),
-                ))
+                ));
             }
 
             // Add a dependency on both the extra and base package, with and without the marker.
@@ -1885,7 +1885,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 })
                         })
                         .collect(),
-                ))
+                ));
             }
 
             // Add a dependency on the dependency group, with and without the marker.
@@ -1905,7 +1905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             url: None,
                         })
                         .collect(),
-                ))
+                ));
             }
         };
         Ok(Dependencies::Available(dependencies))
@@ -2422,7 +2422,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if !self.selector.use_highest_version(&package_name, &env) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
-                                debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
+                                debug!(
+                                    "Skipping prefetch for unbounded minimum-version range: {package_name} ({range})"
+                                );
                                 return Ok(None);
                             }
                         }
@@ -2573,7 +2575,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        ResolveError::NoSolution(NoSolutionError::new(
+        ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
             available_versions,
@@ -2590,7 +2592,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.tags.clone(),
             self.workspace_members.clone(),
             self.options.clone(),
-        ))
+        )))
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
@@ -2785,7 +2787,7 @@ impl ForkState {
                     warn_user_once!(
                         "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
-                        to avoid using outdated versions.",
+                        or `--resolution lowest-direct` to avoid using outdated versions.",
                         name = package.name_no_root().unwrap(),
                     );
                 }
@@ -3607,15 +3609,12 @@ impl Forks {
                 // {foo, bar}, one that excludes {foo, baz} and one
                 // that excludes {bar, baz}.
                 for (i, _) in set.iter().enumerate() {
-                    let fork_allows_group =
-                        fork.clone()
-                            .filter(set.iter().cloned().enumerate().map(|(j, group)| {
-                                if i == j {
-                                    Ok(group)
-                                } else {
-                                    Err(group)
-                                }
-                            }));
+                    let fork_allows_group = fork.clone().filter(
+                        set.iter()
+                            .cloned()
+                            .enumerate()
+                            .map(|(j, group)| if i == j { Ok(group) } else { Err(group) }),
+                    );
                     if let Some(fork_allows_group) = fork_allows_group {
                         new.push(fork_allows_group);
                     }

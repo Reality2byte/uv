@@ -2,7 +2,7 @@
 
 #[cfg(feature = "git")]
 mod conditional_imports {
-    pub(crate) use crate::common::{decode_token, READ_ONLY_GITHUB_TOKEN};
+    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
 #[cfg(feature = "git")]
@@ -15,11 +15,11 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
 use uv_fs::Simplified;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use uv_static::EnvVars;
 
-use crate::common::{packse_index_url, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, packse_index_url, uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]
@@ -799,18 +799,71 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
+    error: the argument '--tag <TAG>' cannot be used with '--raw'
 
     Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn reinstall_local_source_trees() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project_1 = context.temp_dir.child("project1");
+    project_1.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let project_2 = context.temp_dir.child("project2");
+    project_2.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project2==0.1.0 (from file://[TEMP_DIR]/project2)
+    ");
+
+    // Running `uv add` should reinstall the project.
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project2==0.1.0 (from file://[TEMP_DIR]/project2)
+    ");
 
     Ok(())
 }
@@ -1404,12 +1457,7 @@ fn add_remove_inline_optional() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + sniffio==1.3.1
      - typing-extensions==4.10.0
     ");
 
@@ -3852,7 +3900,7 @@ fn add_environment_yml_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Conda environment files (i.e. `environment.yml`) are not supported
+    error: Conda environment files (i.e., `environment.yml`) are not supported
     ");
 
     Ok(())
@@ -3959,7 +4007,7 @@ fn add_lower_bound_existing() -> Result<()> {
     Ok(())
 }
 
-/// Avoid setting a lower bound with `--raw-sources`.
+/// Avoid setting a lower bound with `--raw`.
 #[test]
 fn add_lower_bound_raw() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3973,8 +4021,8 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = ["anyio"]
     "#})?;
 
-    // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r"
+    // Adding `anyio` should _not_ set a lower-bound when using `--raw`.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5762,6 +5810,73 @@ fn add_script_settings() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_script_trailing_comment_lines() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "requests<3",
+        #   "rich",
+        # ]
+        # ///
+        #
+        # Additional description
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = context.read("script.py");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r##"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "requests<3",
+        #   "rich",
+        # ]
+        # ///
+        #
+        # Additional description
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "##
+        );
+    });
+
+    // Adding to a script without a lockfile shouldn't create a lockfile.
+    assert!(!context.temp_dir.join("script.py.lock").exists());
+
+    Ok(())
+}
+
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {
@@ -7511,6 +7626,201 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_with_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        "pytest>=8.1.1",
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            "pytest>=8.1.1",
+            "pytest-randomly>=3.15.0",
+            { include-group = "coverage" },
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
     Ok(())
 }
 
@@ -11480,8 +11790,12 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 5 packages in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
      - iniconfig==2.0.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11509,8 +11823,7 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-     - typing-extensions==4.10.0
+    Audited in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");

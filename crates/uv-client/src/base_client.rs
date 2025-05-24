@@ -25,10 +25,10 @@ use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
+use crate::Connectivity;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::Connectivity;
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -481,14 +481,10 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     // First, try to show a nice trace log
-    if let Some((Some(status), Some(url))) = find_source::<reqwest::Error>(&err)
+    if let Some((Some(status), Some(url))) = find_source::<crate::WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
-        let status = status
-            .canonical_reason()
-            .map(|reason| format!(" HTTP {status} {reason} "))
-            .unwrap_or_else(|| format!(" HTTP {status} "));
-        trace!("Considering retry of {status} for {url}");
+        trace!("Considering retry of response HTTP {status} for {url}");
     } else {
         trace!("Considering retry of error: {err:?}");
     }

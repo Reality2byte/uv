@@ -15,7 +15,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
-use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
+use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
 use tracing::debug;
 use url::Url;
 
@@ -26,18 +26,18 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    redact_credentials, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations,
-    IndexMetadata, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
-    ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
+    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, ResolvedDist, StaticMetadata,
+    ToUrlError, UrlString, redact_credentials,
 };
-use uv_fs::{relative_to, PortablePath, PortablePathBuf};
+use uv_fs::{PortablePath, PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -824,10 +824,10 @@ impl Lock {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
                     match item.conflict() {
-                        ConflictPackage::Extra(ref extra) => {
+                        ConflictPackage::Extra(extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        ConflictPackage::Group(ref group) => {
+                        ConflictPackage::Group(group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }
@@ -1100,8 +1100,8 @@ impl Lock {
 
     fn find_by_id(&self, id: &PackageId) -> &Package {
         let index = *self.by_id.get(id).expect("locked package for ID");
-        let dist = self.packages.get(index).expect("valid index for package");
-        dist
+
+        (self.packages.get(index).expect("valid index for package")) as _
     }
 
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
@@ -4111,7 +4111,7 @@ impl Wheel {
                             name: filename.name,
                             version: filename.version,
                         }
-                        .into())
+                        .into());
                     }
                 };
                 let file = Box::new(uv_distribution_types::File {
@@ -4141,7 +4141,7 @@ impl Wheel {
                             name: filename.name,
                             version: filename.version,
                         }
-                        .into())
+                        .into());
                     }
                 };
                 let file_url = Url::from_file_path(root.join(index_path).join(file_path))
@@ -4527,7 +4527,7 @@ impl From<Hash> for Hashes {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.without_fragment()),
+        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }

@@ -11,8 +11,7 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_distribution_filename::WheelFilename;
-use uv_fs::{cachedir, directories, LockedFile};
+use uv_fs::{LockedFile, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -20,7 +19,7 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{rm_rf, Removal};
+pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -534,45 +533,26 @@ impl Cache {
     fn find_archive_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
         let mut references = FxHashSet::default();
         for bucket in CacheBucket::iter() {
+            // As an optimization, skip the archive bucket itself.
+            if matches!(bucket, CacheBucket::Archive) {
+                continue;
+            }
+
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
                 for entry in walkdir::WalkDir::new(bucket_path) {
                     let entry = entry?;
 
-                    // Ignore any `.lock` files.
-                    if entry
-                        .path()
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                    {
+                    // As an optimization, ignore any `.lock`, `.whl`, `.msgpack`, `.rev`, or
+                    // `.http` files.
+                    if entry.path().extension().is_some_and(|ext| {
+                        ext.eq_ignore_ascii_case("lock")
+                            || ext.eq_ignore_ascii_case("whl")
+                            || ext.eq_ignore_ascii_case("http")
+                            || ext.eq_ignore_ascii_case("rev")
+                            || ext.eq_ignore_ascii_case("msgpack")
+                    }) {
                         continue;
-                    }
-
-                    let Some(filename) = entry
-                        .path()
-                        .file_name()
-                        .and_then(|file_name| file_name.to_str())
-                    else {
-                        continue;
-                    };
-
-                    if bucket == CacheBucket::Wheels {
-                        // In the `wheels` bucket, we often use a hash of the filename as the
-                        // directory name, so we can't rely on the stem.
-                        //
-                        // Instead, we skip if it contains an extension (e.g., `.whl`, `.http`,
-                        // `.rev`, and `.msgpack` files).
-                        if filename
-                            .rsplit_once('-') // strip version/tags, might contain a dot ('.')
-                            .is_none_or(|(_, suffix)| suffix.contains('.'))
-                        {
-                            continue;
-                        }
-                    } else {
-                        // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        if WheelFilename::from_stem(filename).is_err() {
-                            continue;
-                        }
                     }
 
                     if let Ok(target) = self.resolve_link(entry.path()) {
@@ -1006,7 +986,7 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v15",
+            Self::Simple => "simple-v16",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
             Self::Wheels => "wheels-v5",
@@ -1214,11 +1194,7 @@ impl Refresh {
     pub fn combine(self, other: Refresh) -> Self {
         /// Return the maximum of two timestamps.
         fn max(a: Timestamp, b: Timestamp) -> Timestamp {
-            if a > b {
-                a
-            } else {
-                b
-            }
+            if a > b { a } else { b }
         }
 
         match (self, other) {

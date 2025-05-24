@@ -7,9 +7,10 @@ use url::Url;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
+use uv_redacted::redacted_url;
 
 use crate::middleware::OfflineError;
-use crate::{html, FlatIndexError};
+use crate::{FlatIndexError, html};
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -45,7 +46,7 @@ impl Error {
 
     /// Returns `true` if this error corresponds to an I/O "not found" error.
     pub(crate) fn is_file_not_exists(&self) -> bool {
-        let ErrorKind::Io(ref err) = &*self.kind else {
+        let ErrorKind::Io(err) = &*self.kind else {
             return false;
         };
         matches!(err.kind(), std::io::ErrorKind::NotFound)
@@ -197,10 +198,10 @@ pub enum ErrorKind {
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(Url, #[source] WrappedReqwestError),
 
-    #[error("Received some unexpected JSON from {url}")]
+    #[error("Received some unexpected JSON from {}", redacted_url(url))]
     BadJson { source: serde_json::Error, url: Url },
 
-    #[error("Received some unexpected HTML from {url}")]
+    #[error("Received some unexpected HTML from {}", redacted_url(url))]
     BadHtml { source: html::Error, url: Url },
 
     #[error("Failed to read zip with range requests: `{0}`")]
@@ -245,7 +246,9 @@ pub enum ErrorKind {
     #[error("Writing to cache archive failed: {0}")]
     ArchiveWrite(String),
 
-    #[error("Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`")]
+    #[error(
+        "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
+    )]
     Offline(String),
 }
 

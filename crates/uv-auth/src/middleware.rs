@@ -4,11 +4,11 @@ use http::{Extensions, StatusCode};
 use url::Url;
 
 use crate::{
+    CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
     credentials::{Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
-    CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
 use anyhow::{anyhow, format_err};
 use netrc::Netrc;
@@ -280,7 +280,10 @@ impl Middleware for AuthMiddleware {
             .map(|credentials| credentials.to_username())
             .unwrap_or(Username::none());
         let credentials = if let Some(index_url) = maybe_index_url {
-            self.cache().get_url(index_url, &username)
+            self.cache().get_url(index_url, &username).or_else(|| {
+                self.cache()
+                    .get_realm(Realm::from(retry_request.url()), username)
+            })
         } else {
             // Since there is no known index for this URL, check if there are credentials in
             // the realm-level cache.
@@ -434,9 +437,15 @@ impl AuthMiddleware {
             Some(credentials)
         } else if index_url.is_some() {
             // If this is a known index, we fall back to checking for the realm.
-            self.cache()
+            if let Some(credentials) = self
+                .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
-                .or(Some(credentials))
+            {
+                request = credentials.authenticate(request);
+                Some(credentials)
+            } else {
+                Some(credentials)
+            }
         } else {
             // If we don't find a password, we'll still attempt the request with the existing credentials
             Some(credentials)
@@ -582,8 +591,8 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::credentials::Password;
     use crate::Index;
+    use crate::credentials::Password;
 
     use super::*;
 
@@ -1088,7 +1097,10 @@ mod tests {
         let mut url = base_url.clone();
         url.set_username("other_user").unwrap();
         assert!(
-            matches!(client.get(url).send().await, Err(reqwest_middleware::Error::Middleware(_))),
+            matches!(
+                client.get(url).send().await,
+                Err(reqwest_middleware::Error::Middleware(_))
+            ),
             "If the username does not match, a password should not be fetched, and the middleware should fail eagerly since `authenticate = always` is not satisfied"
         );
 
@@ -1605,8 +1617,8 @@ mod tests {
     /// credentials for _every_ request URL at the cost of inconsistent behavior when
     /// credentials are not scoped to a realm.
     #[test(tokio::test)]
-    async fn test_credentials_from_keyring_mixed_authentication_in_realm_same_username(
-    ) -> Result<(), Error> {
+    async fn test_credentials_from_keyring_mixed_authentication_in_realm_same_username()
+    -> Result<(), Error> {
         let username = "user";
         let password_1 = "password1";
         let password_2 = "password2";
@@ -1705,8 +1717,8 @@ mod tests {
     /// where multiple URLs with the same username and realm share the same realm-level
     /// credentials cache entry.
     #[test(tokio::test)]
-    async fn test_credentials_from_keyring_mixed_authentication_different_indexes_same_realm(
-    ) -> Result<(), Error> {
+    async fn test_credentials_from_keyring_mixed_authentication_different_indexes_same_realm()
+    -> Result<(), Error> {
         let username = "user";
         let password_1 = "password1";
         let password_2 = "password2";
@@ -1817,8 +1829,8 @@ mod tests {
     /// Demonstrates that when an index' credentials are cached for its realm, we
     /// find those credentials if they're not present in the keyring.
     #[test(tokio::test)]
-    async fn test_credentials_from_keyring_shared_authentication_different_indexes_same_realm(
-    ) -> Result<(), Error> {
+    async fn test_credentials_from_keyring_shared_authentication_different_indexes_same_realm()
+    -> Result<(), Error> {
         let username = "user";
         let password = "password";
 

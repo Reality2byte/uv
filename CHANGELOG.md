@@ -3,6 +3,124 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.8
+
+### Python
+
+We are reverting most of our Python changes from `uv 0.7.6` and `uv 0.7.7` due to
+a miscompilation that makes the Python interpreter behave incorrectly, resulting
+in spurious type-errors involving str. This issue seems to be isolated to
+x86_64 Linux, and affected at least Python 3.12, 3.13, and 3.14.
+
+The following changes that were introduced in those versions of uv are temporarily
+being reverted while we test and deploy a proper fix for the miscompilation:
+
+- Add Python 3.14 on musl
+- free-threaded Python on musl
+- Add Python 3.14.0a7
+- Statically link `libpython` into the interpreter on Linux for a significant performance boost
+
+See [the issue for details](https://github.com/astral-sh/uv/issues/13610).
+
+### Documentation
+
+- Remove misleading line in pin documentation ([#13611](https://github.com/astral-sh/uv/pull/13611))
+
+## 0.7.7
+
+### Python
+
+- Work around third-party packages that (incorrectly) assume the interpreter is dynamically linking libpython
+- Allow the experimental JIT to be enabled at runtime on Python 3.13 and 3.14 on macOS on aarch64 aka Apple Silicon
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250521)
+for more details.
+
+### Bug fixes
+
+- Make `uv version` lock and sync ([#13317](https://github.com/astral-sh/uv/pull/13317))
+- Fix references to `ldd` in diagnostics to correctly refer to `ld.so` ([#13552](https://github.com/astral-sh/uv/pull/13552))
+
+### Documentation
+
+- Clarify adding SSH Git dependencies ([#13534](https://github.com/astral-sh/uv/pull/13534))
+
+## 0.7.6
+
+### Python
+
+- Add Python 3.14 on musl
+- Add free-threaded Python on musl
+- Add Python 3.14.0a7
+- Statically link `libpython` into the interpreter on Linux for a significant performance boost
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250517)
+for more details.
+
+### Enhancements
+
+- Improve compatibility of `VIRTUAL_ENV_PROMPT` value ([#13501](https://github.com/astral-sh/uv/pull/13501))
+- Bump MSRV to 1.85 and Edition 2024 ([#13516](https://github.com/astral-sh/uv/pull/13516))
+
+### Bug fixes
+
+- Respect default extras in uv remove ([#13380](https://github.com/astral-sh/uv/pull/13380))
+
+### Documentation
+
+- Fix PowerShell code blocks ([#13511](https://github.com/astral-sh/uv/pull/13511))
+
+## 0.7.5
+
+### Bug fixes
+
+- Support case-sensitive module discovery in the build backend ([#13468](https://github.com/astral-sh/uv/pull/13468))
+- Bump Simple cache bucket to v16 ([#13498](https://github.com/astral-sh/uv/pull/13498))
+- Don't error when the script is too short for the buffer ([#13488](https://github.com/astral-sh/uv/pull/13488))
+- Add missing word in "script not supported" error ([#13483](https://github.com/astral-sh/uv/pull/13483))
+
+## 0.7.4
+
+### Enhancements
+
+- Add more context to external errors ([#13351](https://github.com/astral-sh/uv/pull/13351))
+- Align indentation of long arguments ([#13394](https://github.com/astral-sh/uv/pull/13394))
+- Preserve order of dependencies which are sorted naively ([#13334](https://github.com/astral-sh/uv/pull/13334))
+- Align progress bars by largest name length ([#13266](https://github.com/astral-sh/uv/pull/13266))
+- Reinstall local packages in `uv add` ([#13462](https://github.com/astral-sh/uv/pull/13462))
+- Rename `--raw-sources` to `--raw` ([#13348](https://github.com/astral-sh/uv/pull/13348))
+- Show 'Downgraded' when `self update` is used to install an older version ([#13340](https://github.com/astral-sh/uv/pull/13340))
+- Suggest `uv self update` if required uv version is newer ([#13305](https://github.com/astral-sh/uv/pull/13305))
+- Add 3.14 beta images to uv Docker images ([#13390](https://github.com/astral-sh/uv/pull/13390))
+- Add comma after "i.e." in Conda environment error ([#13423](https://github.com/astral-sh/uv/pull/13423))
+- Be more precise in unpinned packages warning ([#13426](https://github.com/astral-sh/uv/pull/13426))
+- Fix detection of sorted dependencies when include-group is used ([#13354](https://github.com/astral-sh/uv/pull/13354))
+- Fix display of HTTP responses in trace logs for retry of errors ([#13339](https://github.com/astral-sh/uv/pull/13339))
+- Log skip reasons during Python installation key interpreter match checks ([#13472](https://github.com/astral-sh/uv/pull/13472))
+- Redact credentials when displaying URLs ([#13333](https://github.com/astral-sh/uv/pull/13333))
+
+### Bug fixes
+
+- Avoid erroring on `pylock.toml` dependency entries ([#13384](https://github.com/astral-sh/uv/pull/13384))
+- Avoid panics for cannot-be-a-base URLs ([#13406](https://github.com/astral-sh/uv/pull/13406))
+- Ensure cached realm credentials are applied if no password is found for index URL ([#13463](https://github.com/astral-sh/uv/pull/13463))
+- Fix `.tgz` parsing to respect true extension ([#13382](https://github.com/astral-sh/uv/pull/13382))
+- Fix double self-dependency ([#13366](https://github.com/astral-sh/uv/pull/13366))
+- Reject `pylock.toml` in `uv add -r` ([#13421](https://github.com/astral-sh/uv/pull/13421))
+- Retain dot-separated wheel tags during cache prune ([#13379](https://github.com/astral-sh/uv/pull/13379))
+- Retain trailing comments after PEP 723 metadata block ([#13460](https://github.com/astral-sh/uv/pull/13460))
+
+### Documentation
+
+- Use "export" instead of "install" in `uv export` arguments ([#13430](https://github.com/astral-sh/uv/pull/13430))
+- Remove extra newline ([#13461](https://github.com/astral-sh/uv/pull/13461))
+
+### Preview features
+
+- Build backend: Normalize glob paths ([#13465](https://github.com/astral-sh/uv/pull/13465))
+
 ## 0.7.3
 
 ### Enhancements
