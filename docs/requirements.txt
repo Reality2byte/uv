@@ -11,8 +11,8 @@ beautifulsoup4==4.13.4
     #   markdownify
     #   mkdocs-llmstxt
 black==24.4.2
-    # via -r docs/requirements.in
-certifi==2024.7.4
+    # via -r requirements.in
+certifi==2026.1.4
     # via requests
 charset-normalizer==3.3.2
     # via requests
@@ -21,19 +21,16 @@ click==8.1.7
     #   black
     #   mkdocs
 colorama==0.4.6
-    # via
-    #   click
-    #   mkdocs
-    #   mkdocs-material
+    # via mkdocs-material
 ghp-import==2.1.0
     # via mkdocs
 gitdb==4.0.12
     # via gitpython
 gitpython==3.1.44
     # via mkdocs-git-revision-date-localized-plugin
-idna==3.7
+idna==3.11
     # via requests
-jinja2==3.1.4
+jinja2==3.1.6
     # via
     #   mkdocs
     #   mkdocs-material
@@ -44,7 +41,7 @@ markdown==3.6
     #   mkdocs
     #   mkdocs-material
     #   pymdown-extensions
-markdown-it-py==3.0.0
+markdown-it-py[linkify]==3.0.0
     # via
     #   mdformat
     #   mdformat-gfm
@@ -57,7 +54,7 @@ markupsafe==2.1.5
     #   mkdocs
 mdformat==0.7.22
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mdformat-admon
     #   mdformat-gfm
     #   mdformat-mkdocs
@@ -65,12 +62,12 @@ mdformat==0.7.22
     #   mkdocs-llmstxt
 mdformat-admon==2.0.6
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mdformat-mkdocs
 mdformat-gfm==0.3.6
     # via mdformat-mkdocs
 mdformat-mkdocs==3.0.0
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mdformat-tables==0.4.1
     # via mdformat-gfm
 mdit-py-plugins==0.4.1
@@ -86,22 +83,22 @@ mergedeep==1.3.4
     #   mkdocs-get-deps
 mkdocs==1.6.0
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-git-revision-date-localized-plugin
     #   mkdocs-material
     #   mkdocs-redirects
 mkdocs-get-deps==0.2.0
     # via mkdocs
 mkdocs-git-revision-date-localized-plugin==1.3.0
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-llmstxt==0.2.0
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-material==9.7.1
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
 mkdocs-redirects==1.2.2
-    # via -r docs/requirements.in
+    # via -r requirements.in
 more-itertools==10.3.0
     # via mdformat-mkdocs
 mypy-extensions==1.0.0
@@ -122,7 +119,7 @@ platformdirs==4.2.2
     #   mkdocs-get-deps
 pygments==2.18.0
     # via mkdocs-material
-pymdown-extensions==10.8.1
+pymdown-extensions==10.16.1
     # via mkdocs-material
 python-dateutil==2.9.0.post0
     # via ghp-import
@@ -136,7 +133,7 @@ pyyaml==6.0.1
     #   pyyaml-env-tag
 pyyaml-env-tag==0.1
     # via mkdocs
-requests==2.32.3
+requests==2.32.4
     # via mkdocs-material
 six==1.16.0
     # via
@@ -150,7 +147,7 @@ typing-extensions==4.14.0
     # via beautifulsoup4
 uc-micro-py==1.0.3
     # via linkify-it-py
-urllib3==2.2.2
+urllib3==2.6.3
     # via requests
 watchdog==4.0.1
     # via mkdocs
